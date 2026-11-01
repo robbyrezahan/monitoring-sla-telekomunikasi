@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Dashboard Monitoring Site Telekomunikasi</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS (xlsx) CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 10px;
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Sticky Freeze Panes Classes */
+        .sticky-col {
+            position: sticky;
+            z-index: 10;
+        }
+        thead th.sticky-col {
+            z-index: 25;
+            background-color: #0f172a !important; /* slate-900 */
+        }
+        tbody td.sticky-col {
+            background-color: #ffffff;
+        }
+        tr:hover td.sticky-col {
+            background-color: #f8fafc; /* slate-50 on row hover */
+        }
+
+        /* Calculated Freeze Positions for 8 Columns */
+        .col-freeze-1 { left: 0px; min-width: 45px; }
+        .col-freeze-2 { left: 45px; min-width: 100px; }
+        .col-freeze-3 { left: 145px; min-width: 140px; }
+        .col-freeze-4 { left: 285px; min-width: 100px; }
+        .col-freeze-5 { left: 385px; min-width: 120px; }
+        .col-freeze-6 { left: 505px; min-width: 120px; }
+        .col-freeze-7 { left: 625px; min-width: 120px; }
+        .col-freeze-8 { left: 745px; min-width: 120px; box-shadow: 3px 0px 5px -2px rgba(0,0,0,0.15); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
+        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2 rounded-lg">
+                    <i data-lucide="radio" class="w-6 h-6 text-white"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-none">Dashboard Monitoring Site SLA</h1>
+                    <p class="text-xs text-slate-400 mt-1">Sistem Laporan Availabilitas & Problem SLA Harian</p>
+                </div>
+            </div>
+
+            <!-- Action Buttons Header -->
+            <div class="flex items-center space-x-2">
+                <button onclick="downloadExcelTemplate()" class="inline-flex items-center px-3 py-2 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 transition">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-1.5 text-emerald-400"></i> Download Template Excel
+                </button>
+
+                <label class="inline-flex items-center px-3 py-2 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 cursor-pointer transition">
+                    <i data-lucide="upload" class="w-4 h-4 mr-1.5 text-blue-400"></i> Upload Bulk Excel
+                    <input type="file" id="bulkUploadInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleBulkUpload(event)">
+                </label>
+
+                <button onclick="openAddSiteModal()" class="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-semibold text-white shadow-sm transition">
+                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Tambah Site Baru
+                </button>
+
+                <button onclick="exportVisibleData()" class="inline-flex items-center px-3 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold text-white shadow-sm transition">
+                    <i data-lucide="download" class="w-4 h-4 mr-1"></i> Export Data Tampil
+                </button>
+
+                <button onclick="resetDataToDefault()" class="inline-flex items-center px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-medium transition" title="Reset ke data awal">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4 mr-1"></i> Reset Data
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 p-4 sm:p-6 max-w-full mx-auto w-full flex flex-col space-y-6">
+
+        <!-- Top Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Total Site</p>
+                    <h3 id="statTotalSite" class="text-2xl font-bold text-slate-800 mt-1">0</h3>
+                </div>
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                    <i data-lucide="tower-control" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">Rata-rata SLA Keseluruhan</p>
+                    <h3 id="statAvgSla" class="text-2xl font-bold text-slate-800 mt-1">0%</h3>
+                </div>
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <i data-lucide="activity" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">SLA Achieved (>=95.5%)</p>
+                    <h3 id="statAchieved" class="text-2xl font-bold text-emerald-600 mt-1">0</h3>
+                </div>
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-medium text-slate-500">SLA Not Achieved (<95.5%)</p>
+                    <h3 id="statNotAchieved" class="text-2xl font-bold text-rose-600 mt-1">0</h3>
+                </div>
+                <div class="p-3 bg-rose-50 text-rose-600 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div class="relative w-full md:w-96">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                <input type="text" id="searchInput" oninput="renderTable()" placeholder="Cari Site ID, Site Name, Opsel..." class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <select id="filterSla" onchange="renderTable()" class="border border-slate-300 rounded-lg text-sm px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <option value="ALL">Semua SLA Status</option>
+                    <option value="Achieved">Achieved (>=95.5%)</option>
+                    <option value="Not Achieved">Not Achieved (<95.5%)</option>
+                </select>
+
+                <select id="filterProblem" onchange="renderTable()" class="border border-slate-300 rounded-lg text-sm px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    <option value="ALL">Semua Status Problem</option>
+                    <option value="Open">Open</option>
+                    <option value="Close">Close</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Spreadsheet Data Table Container -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div class="overflow-x-auto custom-scrollbar max-h-[600px]">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead class="bg-slate-900 text-slate-200 uppercase font-semibold sticky top-0 z-30 shadow-sm">
+                        <tr id="tableHeader">
+                            <!-- Populated via JavaScript -->
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-200">
+                        <!-- Populated via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Table Footer info -->
+            <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+                <span>Menampilkan <strong id="visibleRowsCount" class="text-slate-800">0</strong> dari <strong id="totalRowsCount" class="text-slate-800">0</strong> Site</span>
+                <span class="flex items-center"><i data-lucide="save" class="w-3.5 h-3.5 inline mr-1 text-emerald-500"></i> Auto-Save ke LocalStorage Aktif. Data tersimpan aman saat refresh.</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Form (Tambah / Edit Site) -->
+    <div id="siteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
+                <h3 id="modalTitle" class="font-bold text-base flex items-center">
+                    <i data-lucide="edit-3" class="w-5 h-5 mr-2 text-blue-400"></i> Form Edit Data Site
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white transition">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+
+            <form id="siteForm" onsubmit="saveModalData(event)" class="p-6 overflow-y-auto space-y-6 custom-scrollbar">
+                <input type="hidden" id="editRowId">
+
+                <!-- Metadata Section -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 border-b border-slate-200 pb-1">1. Informasi Metadata Site</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Site ID</label>
+                            <input type="text" id="modal_site_id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Site Name</label>
+                            <input type="text" id="modal_site_name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Opsel</label>
+                            <input type="text" id="modal_opsel" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Konsorsium</label>
+                            <input type="text" id="modal_konsorsium" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Provinsi</label>
+                            <input type="text" id="modal_provinsi" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Kab/Kota</label>
+                            <input type="text" id="modal_kabkota" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Kecamatan</label>
+                            <input type="text" id="modal_kecamatan" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Daily Performance Section -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 border-b border-slate-200 pb-1">2. Performa Harian Oktober (1 - 31 Oct)</h4>
+                    <div id="modalDailyContainer" class="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <!-- Populated via JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Problem Details Section -->
+                <div>
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3 border-b border-slate-200 pb-1">3. Problem & Action Plan Detail</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Kategori Problem</label>
+                            <input type="text" id="modal_kategori_problem" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Kategori Sub Problem</label>
+                            <input type="text" id="modal_kategori_sub_problem" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Problem Status</label>
+                            <select id="modal_problem_status" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 font-bold">
+                                <option value="Close" class="text-emerald-600">Close</option>
+                                <option value="Open" class="text-rose-600">Open</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-medium text-slate-700 mb-1">RCA (Root Cause Analysis)</label>
+                            <textarea id="modal_rca" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Summ. Problem Kategori</label>
+                            <input type="text" id="modal_summ_problem_kategori" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Summ. Sub Problem Kategori</label>
+                            <input type="text" id="modal_summ_sub_problem_kategori" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Problem Detail</label>
+                            <input type="text" id="modal_problem_detail" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-xs font-medium text-slate-700 mb-1">Plan Action</label>
+                            <textarea id="modal_plan_action" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100 transition">Batal</button>
+                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-md transition">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script Application Logic -->
+    <script>
+        const STORAGE_KEY = 'TELECOM_SLA_MONITORING_DATA';
+        const dateColumns = Array.from({length: 31}, (_, i) => `${i + 1}-OCT-26`);
+        const SLA_THRESHOLD = 95.5;
+
+        const fixedHeaders = [
+            'NO', 'SITE ID', 'SITE NAME', 'OPSEL', 'KONSORSIUM', 'PROVINSI', 'KAB/KOTA', 'KECAMATAN',
+            ...dateColumns,
+            'AVERAGE', 'SLA STATUS',
+            'KATEGORI PROBLEM', 'KATEGORI SUB PROBLEM', 'RCA', 'PROBLEM STATUS',
+            'SUMM. PROBLEM KATEGORI', 'SUMM. SUB PROBLEM KATEGORI', 'PROBLEM DETAIL', 'PLAN ACTION', 'AKSI'
+        ];
+
+        const initialSampleData = [
+            {
+                id: 1,
+                site_id: 'PAP0029',
+                site_name: 'TOTOBERI',
+                opsel: 'TELKOMSEL',
+                konsorsium: 'LA-HW-SEI',
+                provinsi: 'PAPUA TENGAH',
+                kabkota: 'NABIRE',
+                kecamatan: 'WAPOGA',
+                daily: Object.fromEntries(dateColumns.map((d, i) => [d, i === 9 ? 98.98 : 100])),
+                kategori_problem: 'None',
+                kategori_sub_problem: 'None',
+                rca: '-',
+                problem_status: 'Close',
+                summ_problem_kategori: 'None',
+                summ_sub_problem_kategori: 'None',
+                problem_detail: '-',
+                plan_action: '-'
+            },
+            {
+                id: 2,
+                site_id: 'PAP0066',
+                site_name: 'WABOMPI',
+                opsel: 'TELKOMSEL',
+                konsorsium: 'LA-HW-SEI',
+                provinsi: 'PAPUA',
+                kabkota: 'KEPULAUAN YAPEN',
+                kecamatan: 'YAPEN TIMUR',
+                daily: Object.fromEntries(dateColumns.map(d => [d, 0])),
+                kategori_problem: 'Power',
+                kategori_sub_problem: 'Baterai Drop',
+                rca: 'Modul SCC Rusak',
+                problem_status: 'Open',
+                summ_problem_kategori: 'Power Issue',
+                summ_sub_problem_kategori: 'Hardware Fail',
+                problem_detail: 'Perlu penggantian unit SCC',
+                plan_action: 'Estimasi kedatangan sparepart 2 Nov'
+            }
+        ];
+
+        let siteData = [];
+
+        // Load Data from LocalStorage or Default
+        function loadSavedData() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    siteData = JSON.parse(saved);
+                } else {
+                    siteData = JSON.parse(JSON.stringify(initialSampleData));
+                    saveToLocalStorage();
+                }
+            } catch (err) {
+                console.error("Gagal membaca LocalStorage:", err);
+                siteData = JSON.parse(JSON.stringify(initialSampleData));
+            }
+        }
+
+        // Save Data to LocalStorage
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(siteData));
+            } catch (err) {
+                console.error("Gagal menyimpan ke LocalStorage:", err);
+            }
+        }
+
+        // Reset Data to Initial
+        function resetDataToDefault() {
+            if (confirm('Apakah Anda yakin ingin mereset seluruh data kembali ke bawaan awal? Data hasil upload akan terhapus.')) {
+                localStorage.removeItem(STORAGE_KEY);
+                siteData = JSON.parse(JSON.stringify(initialSampleData));
+                saveToLocalStorage();
+                renderTable();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedData();
+            renderHeader();
+            renderTable();
+            lucide.createIcons();
+        });
+
+        function renderHeader() {
+            const tr = document.getElementById('tableHeader');
+            tr.innerHTML = fixedHeaders.map((h, idx) => {
+                let extraClasses = "px-3 py-3 border-b border-slate-700 whitespace-nowrap text-xs font-semibold ";
+                if (idx < 8) {
+                    extraClasses += `sticky-col col-freeze-${idx+1} border-r border-slate-800 `;
+                    if (idx === 7) extraClasses += `border-r-2 border-slate-600 `;
+                } else if (h === 'AVERAGE') {
+                    extraClasses += "bg-slate-800 text-blue-300 text-center ";
+                } else if (h === 'SLA STATUS') {
+                    extraClasses += "bg-slate-800 text-emerald-300 text-center ";
+                } else if (h === 'AKSI') {
+                    extraClasses += "text-center ";
+                } else {
+                    extraClasses += "text-slate-300 ";
+                }
+                return `<th class="${extraClasses}">${h}</th>`;
+            }).join('');
+        }
+
+        function calculateRowAverage(dailyObj) {
+            const vals = Object.values(dailyObj).map(v => parseFloat(v)).filter(v => !isNaN(v));
+            if(vals.length === 0) return 0;
+            const sum = vals.reduce((a, b) => a + b, 0);
+            return (sum / vals.length);
+        }
+
+        function getFilteredData() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const filterSla = document.getElementById('filterSla').value;
+            const filterProblem = document.getElementById('filterProblem').value;
+
+            return siteData.filter(row => {
+                const avg = calculateRowAverage(row.daily || {});
+                const slaStatus = avg >= SLA_THRESHOLD ? 'Achieved' : 'Not Achieved';
+
+                const matchesSearch = (row.site_id || '').toLowerCase().includes(search) ||
+                                      (row.site_name || '').toLowerCase().includes(search) ||
+                                      (row.opsel || '').toLowerCase().includes(search) ||
+                                      (row.provinsi || '').toLowerCase().includes(search);
+
+                const matchesSla = (filterSla === 'ALL') || (slaStatus === filterSla);
+                const matchesProblem = (filterProblem === 'ALL') || (row.problem_status === filterProblem);
+
+                return matchesSearch && matchesSla && matchesProblem;
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('tableBody');
+            const filtered = getFilteredData();
+            tbody.innerHTML = '';
+
+            filtered.forEach((row, index) => {
+                const avg = calculateRowAverage(row.daily || {});
+                const isAchieved = avg >= SLA_THRESHOLD;
+                const slaBadge = isAchieved 
+                    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">Achieved</span>` 
+                    : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300">Not Achieved</span>`;
+
+                const isAvgBelow95 = avg < 95;
+                const avgFormatted = `<span class="${isAvgBelow95 ? 'text-rose-600 font-bold' : 'text-slate-800 font-semibold'}">${avg.toFixed(2)}%</span>`;
+
+                const isStatusOpen = (row.problem_status || '').toLowerCase() === 'open';
+                const statusBadge = isStatusOpen
+                    ? `<span class="px-2 py-1 rounded text-xs font-bold text-rose-600 bg-rose-50 uppercase tracking-wide">OPEN</span>`
+                    : `<span class="px-2 py-1 rounded text-xs font-semibold text-emerald-600 uppercase tracking-wide">${row.problem_status || 'CLOSE'}</span>`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-200 text-slate-700";
+
+                let html = `
+                    <td class="px-3 py-2 text-center font-medium sticky-col col-freeze-1 border-r border-slate-100">${index + 1}</td>
+                    <td class="px-3 py-2 font-bold text-blue-600 sticky-col col-freeze-2 border-r border-slate-100">${row.site_id || ''}</td>
+                    <td class="px-3 py-2 font-semibold text-slate-800 sticky-col col-freeze-3 border-r border-slate-100">${row.site_name || ''}</td>
+                    <td class="px-3 py-2 sticky-col col-freeze-4 border-r border-slate-100">${row.opsel || ''}</td>
+                    <td class="px-3 py-2 sticky-col col-freeze-5 border-r border-slate-100">${row.konsorsium || ''}</td>
+                    <td class="px-3 py-2 sticky-col col-freeze-6 border-r border-slate-100">${row.provinsi || ''}</td>
+                    <td class="px-3 py-2 sticky-col col-freeze-7 border-r border-slate-100">${row.kabkota || ''}</td>
+                    <td class="px-3 py-2 sticky-col col-freeze-8 border-r-2 border-slate-300 font-medium">${row.kecamatan || ''}</td>
+                `;
+
+                dateColumns.forEach(dateCol => {
+                    const val = (row.daily && row.daily[dateCol] !== undefined) ? row.daily[dateCol] : '';
+                    const valNum = parseFloat(val);
+                    const cellColor = (!isNaN(valNum) && valNum < 95) ? 'text-rose-600 font-semibold bg-rose-50/50' : '';
+                    html += `<td class="px-3 py-2 text-center ${cellColor}">${val}</td>`;
+                });
+
+                html += `
+                    <td class="px-3 py-2 text-center bg-slate-100/70 font-semibold">${avgFormatted}</td>
+                    <td class="px-3 py-2 text-center bg-slate-100/70">${slaBadge}</td>
+                    <td class="px-3 py-2">${row.kategori_problem || ''}</td>
+                    <td class="px-3 py-2">${row.kategori_sub_problem || ''}</td>
+                    <td class="px-3 py-2">${row.rca || ''}</td>
+                    <td class="px-3 py-2 text-center">${statusBadge}</td>
+                    <td class="px-3 py-2">${row.summ_problem_kategori || ''}</td>
+                    <td class="px-3 py-2">${row.summ_sub_problem_kategori || ''}</td>
+                    <td class="px-3 py-2">${row.problem_detail || ''}</td>
+                    <td class="px-3 py-2">${row.plan_action || ''}</td>
+                    <td class="px-3 py-2 text-center">
+                        <div class="flex items-center justify-center space-x-1">
+                            <button onclick="openEditModal(${row.id})" class="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition" title="Edit Site">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="deleteRow(${row.id})" class="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg transition" title="Hapus Site">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                tr.innerHTML = html;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('visibleRowsCount').innerText = filtered.length;
+            document.getElementById('totalRowsCount').innerText = siteData.length;
+            updateStatsCards();
+            lucide.createIcons();
+        }
+
+        function updateStatsCards() {
+            const total = siteData.length;
+            document.getElementById('statTotalSite').innerText = total;
+
+            if (total === 0) {
+                document.getElementById('statAvgSla').innerText = '0%';
+                document.getElementById('statAchieved').innerText = '0';
+                document.getElementById('statNotAchieved').innerText = '0';
+                return;
+            }
+
+            let sumAvg = 0;
+            let achievedCount = 0;
+
+            siteData.forEach(row => {
+                const avg = calculateRowAverage(row.daily || {});
+                sumAvg += avg;
+                if (avg >= SLA_THRESHOLD) achievedCount++;
+            });
+
+            const overallAvg = sumAvg / total;
+            document.getElementById('statAvgSla').innerText = `${overallAvg.toFixed(2)}%`;
+            document.getElementById('statAchieved').innerText = achievedCount;
+            document.getElementById('statNotAchieved').innerText = total - achievedCount;
+        }
+
+        function deleteRow(id) {
+            if (confirm('Apakah Anda yakin ingin menghapus data site ini?')) {
+                siteData = siteData.filter(item => item.id !== id);
+                saveToLocalStorage();
+                renderTable();
+            }
+        }
+
+        function openAddSiteModal() {
+            document.getElementById('modalTitle').innerHTML = `<i data-lucide="plus-circle" class="w-5 h-5 mr-2 text-blue-400"></i> Form Tambah Site Baru`;
+            document.getElementById('editRowId').value = '';
+            document.getElementById('siteForm').reset();
+            renderModalDailyInputs({});
+            document.getElementById('siteModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function openEditModal(id) {
+            const row = siteData.find(item => item.id === id);
+            if (!row) return;
+
+            document.getElementById('modalTitle').innerHTML = `<i data-lucide="edit-3" class="w-5 h-5 mr-2 text-blue-400"></i> Form Edit Data Site (${row.site_id})`;
+            document.getElementById('editRowId').value = row.id;
+
+            document.getElementById('modal_site_id').value = row.site_id || '';
+            document.getElementById('modal_site_name').value = row.site_name || '';
+            document.getElementById('modal_opsel').value = row.opsel || '';
+            document.getElementById('modal_konsorsium').value = row.konsorsium || '';
+            document.getElementById('modal_provinsi').value = row.provinsi || '';
+            document.getElementById('modal_kabkota').value = row.kabkota || '';
+            document.getElementById('modal_kecamatan').value = row.kecamatan || '';
+
+            document.getElementById('modal_kategori_problem').value = row.kategori_problem || '';
+            document.getElementById('modal_kategori_sub_problem').value = row.kategori_sub_problem || '';
+            document.getElementById('modal_rca').value = row.rca || '';
+            document.getElementById('modal_problem_status').value = row.problem_status || 'Close';
+            document.getElementById('modal_summ_problem_kategori').value = row.summ_problem_kategori || '';
+            document.getElementById('modal_summ_sub_problem_kategori').value = row.summ_sub_problem_kategori || '';
+            document.getElementById('modal_problem_detail').value = row.problem_detail || '';
+            document.getElementById('modal_plan_action').value = row.plan_action || '';
+
+            renderModalDailyInputs(row.daily || {});
+            document.getElementById('siteModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function renderModalDailyInputs(dailyObj) {
+            const container = document.getElementById('modalDailyContainer');
+            container.innerHTML = dateColumns.map(d => `
+                <div>
+                    <label class="block text-[10px] font-semibold text-slate-500 mb-0.5">${d}</label>
+                    <input type="number" step="0.01" min="0" max="100" data-date="${d}" value="${dailyObj[d] !== undefined ? dailyObj[d] : 100}" class="modal-daily-field w-full px-2 py-1 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-blue-500">
+                </div>
+            `).join('');
+        }
+
+        function closeModal() {
+            document.getElementById('siteModal').classList.add('hidden');
+        }
+
+        function saveModalData(event) {
+            event.preventDefault();
+            const editId = document.getElementById('editRowId').value;
+
+            const dailyObj = {};
+            document.querySelectorAll('.modal-daily-field').forEach(input => {
+                const dateKey = input.getAttribute('data-date');
+                const val = parseFloat(input.value);
+                dailyObj[dateKey] = isNaN(val) ? 0 : val;
+            });
+
+            const formData = {
+                site_id: document.getElementById('modal_site_id').value,
+                site_name: document.getElementById('modal_site_name').value,
+                opsel: document.getElementById('modal_opsel').value,
+                konsorsium: document.getElementById('modal_konsorsium').value,
+                provinsi: document.getElementById('modal_provinsi').value,
+                kabkota: document.getElementById('modal_kabkota').value,
+                kecamatan: document.getElementById('modal_kecamatan').value,
+                daily: dailyObj,
+                kategori_problem: document.getElementById('modal_kategori_problem').value,
+                kategori_sub_problem: document.getElementById('modal_kategori_sub_problem').value,
+                rca: document.getElementById('modal_rca').value,
+                problem_status: document.getElementById('modal_problem_status').value,
+                summ_problem_kategori: document.getElementById('modal_summ_problem_kategori').value,
+                summ_sub_problem_kategori: document.getElementById('modal_summ_sub_problem_kategori').value,
+                problem_detail: document.getElementById('modal_problem_detail').value,
+                plan_action: document.getElementById('modal_plan_action').value
+            };
+
+            if (editId) {
+                const index = siteData.findIndex(item => item.id == editId);
+                if (index !== -1) {
+                    siteData[index] = { id: parseInt(editId), ...formData };
+                }
+            } else {
+                const newId = siteData.length > 0 ? Math.max(...siteData.map(s => s.id)) + 1 : 1;
+                siteData.push({ id: newId, ...formData });
+            }
+
+            saveToLocalStorage();
+            closeModal();
+            renderTable();
+        }
+
+        function downloadExcelTemplate() {
+            const exportHeaders = fixedHeaders.filter(h => h !== 'AKSI');
+            const sampleRow = [
+                1, 'PAP0029', 'TOTOBERI', 'TELKOMSEL', 'LA-HW-SEI', 'PAPUA TENGAH', 'NABIRE', 'WAPOGA',
+                ...Array(31).fill(100),
+                100.0, 'Achieved',
+                'None', 'None', '-', 'Close', 'None', 'None', '-', '-'
+            ];
+
+            const wsData = [exportHeaders, sampleRow];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template SLA");
+
+            XLSX.writeFile(wb, "Template_Monitoring_Site_SLA.xlsx");
+        }
+
+        function handleBulkUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (jsonData.length < 2) {
+                        alert('File Excel kosong atau tidak memiliki data.');
+                        return;
+                    }
+
+                    const headers = jsonData[0].map(h => String(h || '').trim().toUpperCase());
+                    const rows = jsonData.slice(1);
+                    const newSiteData = [];
+
+                    rows.forEach((row, idx) => {
+                        if (!row || row.length === 0) return;
+
+                        const rowObj = {};
+                        headers.forEach((h, i) => {
+                            rowObj[h] = row[i] !== undefined ? row[i] : '';
+                        });
+
+                        const dailyMap = {};
+                        dateColumns.forEach(dateCol => {
+                            const val = rowObj[dateCol];
+                            const num = parseFloat(val);
+                            dailyMap[dateCol] = !isNaN(num) ? num : (val !== undefined ? val : 100);
+                        });
+
+                        newSiteData.push({
+                            id: idx + 1,
+                            site_id: rowObj['SITE ID'] || `SITE-${idx+1}`,
+                            site_name: rowObj['SITE NAME'] || `Site ${idx+1}`,
+                            opsel: rowObj['OPSEL'] || '',
+                            konsorsium: rowObj['KONSORSIUM'] || '',
+                            provinsi: rowObj['PROVINSI'] || '',
+                            kabkota: rowObj['KAB/KOTA'] || '',
+                            kecamatan: rowObj['KECAMATAN'] || '',
+                            daily: dailyMap,
+                            kategori_problem: rowObj['KATEGORI PROBLEM'] || 'None',
+                            kategori_sub_problem: rowObj['KATEGORI SUB PROBLEM'] || 'None',
+                            rca: rowObj['RCA'] || '-',
+                            problem_status: rowObj['PROBLEM STATUS'] || 'Close',
+                            summ_problem_kategori: rowObj['SUMM. PROBLEM KATEGORI'] || 'None',
+                            summ_sub_problem_kategori: rowObj['SUMM. SUB PROBLEM KATEGORI'] || 'None',
+                            problem_detail: rowObj['PROBLEM DETAIL'] || '-',
+                            plan_action: rowObj['PLAN ACTION'] || '-'
+                        });
+                    });
+
+                    if (newSiteData.length > 0) {
+                        siteData = newSiteData;
+                        saveToLocalStorage();
+                        renderTable();
+                        alert(`Berhasil mengunggah ${newSiteData.length} data site dari Excel dan tersimpan di browser.`);
+                    }
+                } catch (err) {
+                    alert('Gagal membaca berkas Excel. Pastikan format file sesuai.');
+                    console.error(err);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportVisibleData() {
+            const filtered = getFilteredData();
+            const exportHeaders = fixedHeaders.filter(h => h !== 'AKSI');
+
+            const rowsData = filtered.map((row, index) => {
+                const avg = calculateRowAverage(row.daily || {});
+                const slaStatus = avg >= SLA_THRESHOLD ? 'Achieved' : 'Not Achieved';
+
+                return [
+                    index + 1,
+                    row.site_id,
+                    row.site_name,
+                    row.opsel,
+                    row.konsorsium,
+                    row.provinsi,
+                    row.kabkota,
+                    row.kecamatan,
+                    ...dateColumns.map(d => (row.daily && row.daily[d] !== undefined) ? row.daily[d] : ''),
+                    parseFloat(avg.toFixed(2)),
+                    slaStatus,
+                    row.kategori_problem,
+                    row.kategori_sub_problem,
+                    row.rca,
+                    row.problem_status,
+                    row.summ_problem_kategori,
+                    row.summ_sub_problem_kategori,
+                    row.problem_detail,
+                    row.plan_action
+                ];
+            });
+
+            const wsData = [exportHeaders, ...rowsData];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Data SLA Tampil");
+
+            XLSX.writeFile(wb, `Export_Monitoring_Site_SLA_${new Date().toISOString().slice(0,10)}.xlsx`);
+        }
+    </script>
+</body>
+</html>
